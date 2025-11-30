@@ -15,6 +15,22 @@ use Illuminate\Support\Facades\Log;
 
 class InformationController extends Controller
 {
+    public function __construct(Private Information $information){}
+
+    public function indexByUser($id)
+    {
+        $user = User::where('id', $id)->first();
+        if (!$user) {
+            return response()->json(['error' => 'Usuário não encontrado.'], 404);
+        }
+        $informations = $this->information->where('user_id', $user->id)->get();
+        if ($informations->isEmpty()) {
+            return response()->json(['message' => 'Nenhuma informação encontrada para este usuário.'], 200);
+        }
+
+        return response()->json($informations, 200);
+    }
+
     public function store($id, StoreInformationRequest $request)
     {
         try {
