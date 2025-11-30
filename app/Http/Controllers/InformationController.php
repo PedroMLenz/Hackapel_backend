@@ -42,8 +42,8 @@ class InformationController extends Controller
             if ($request->has('disease')) {
                 $filters['disease'] = $request->input('disease');
             }
-            if ($request->has('age_group')) {
-                $filters['age_group'] = $request->input('age_group');
+            if ($request->has('age_range')) {
+                $filters['age_range'] = $request->input('age_range');
             }
             if (empty($filters)) {
                 $filters = 'all';
