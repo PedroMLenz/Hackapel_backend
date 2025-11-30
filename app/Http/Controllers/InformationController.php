@@ -7,6 +7,7 @@ use App\Jobs\SendTelegramMessageJob;
 use App\Models\Information;
 use App\Models\Patient;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 
@@ -90,9 +91,36 @@ class InformationController extends Controller
             if (isset($data['message'])) {
                 $chatId = $data['message']['chat']['id'];
                 $nome   = $data['message']['from']['first_name'];
-                Patient::updateOrCreate(
-                    ['chat_id' => $chatId]
-                );
+                Patient::where('telegram_chat_id', $chatId);
+                $dob = fake()->dateTimeBetween('-90 years', '-18 years');
+                $diseases = rand(0, 1);
+                if (!Patient::where('telegram_chat_id', $chatId)->exists()) {
+                    $data = [];
+                    $data = [
+                        'name' => $nome,
+                        'email' => fake()->unique()->safeEmail,
+                        'phone' => preg_replace('/\D/', '', fake()->phoneNumber),
+                        'zip_code' => preg_replace('/\D/', '', fake()->postcode),
+                        'state' => 'RS',
+                        'city' => 'Pelotas',
+                        'neighborhood' => fake()->randomElement(['Centro', 'Três Vendas', 'Areal', 'Fragata', 'Laranjal']),
+                        'street' => fake()->streetName,
+                        'number' => fake()->buildingNumber,
+                        'complement' => fake()->optional()->secondaryAddress,
+                        'date_of_birth' => $dob->format('Y-m-d'),
+                        'age' => Carbon::instance($dob)->age,
+                        'telegram_chat_id' => $chatId,
+                    ];
+                    if ($diseases) {
+                        $data['diseases'] = json_encode(
+                            fake()->randomElements(
+                                ['Diabetes', 'Hipertensão', 'Asma', 'Alergia', 'Depressão', 'Artrite'],
+                                rand(1, 3)
+                            )
+                        );
+                    }
+                    Patient::create($data);
+                }
                 Http::post("https://api.telegram.org/bot".env('TELEGRAM_TOKEN')."/sendMessage", [
                     'chat_id' => $chatId,
                     'text' => "Olá $nome, cadastro feito!",
