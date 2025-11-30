@@ -1,2 +1,2 @@
 web: vendor/bin/heroku-php-apache2 public/
-scheduler: php artisan schedule:run
+worker: php artisan queue:work --sleep=3 --tries=3 --max-time=3600
