@@ -60,21 +60,33 @@ class InformationController extends Controller
                 if (isset($filters['disease'])) {
                     $patients->whereJsonContains('diseases', $filters['disease']);
                 }
-                if (isset($filters['age_group'])) {
-                    $ageGroup = $filters['age_group'];
-                    switch ($ageGroup) {
-                        case 'child':
-                            $patients->where('age', '<=', 12);
-                            break;
-                        case 'teen':
-                            $patients->whereBetween('age', [13, 19]);
-                            break;
-                        case 'adult':
-                            $patients->whereBetween('age', [20, 59]);
-                            break;
-                        case 'senior':
-                            $patients->where('age', '>=', 60);
-                            break;
+                if (isset($filters['age_range'])) {
+                    $ageGroup = $filters['age_range'];
+                    if (is_string($ageGroup) && preg_match('/^\s*(\d+)\s*-\s*(\d+)\s*$/', $ageGroup, $matches)) {
+                        $start = (int) $matches[1];
+                        $end = (int) $matches[2];
+                        if ($start > $end) {
+                            [$start, $end] = [$end, $start];
+                        }
+                        $patients->whereBetween('age', [$start, $end]);
+                    } else {
+                        switch ($ageGroup) {
+                            case 'child':
+                                $patients->where('age', '<=', 12);
+                                break;
+                            case 'teen':
+                                $patients->whereBetween('age', [13, 19]);
+                                break;
+                            case 'adult':
+                                $patients->whereBetween('age', [20, 59]);
+                                break;
+                            case 'senior':
+                                $patients->where('age', '>=', 60);
+                                break;
+                            default:
+                                // unknown format — no age filter applied
+                                break;
+                        }
                     }
                 }
 
