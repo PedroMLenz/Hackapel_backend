@@ -10,6 +10,7 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Faker\Factory as Faker;
 
 class InformationController extends Controller
 {
@@ -87,33 +88,34 @@ class InformationController extends Controller
     public function webhook(Request $request)
     {
         try {
+            $faker = Faker::create('pt_BR');
             $data = $request->all();
             if (isset($data['message'])) {
                 $chatId = $data['message']['chat']['id'];
                 $nome   = $data['message']['from']['first_name'];
                 $patient = Patient::where('telegram_chat_id', $chatId)->first();
-                $dob = fake()->dateTimeBetween('-90 years', '-18 years');
+                $dob = $faker->dateTimeBetween('-90 years', '-18 years');
                 $diseases = rand(0, 1);
                 if (!$patient) {
                     $data = [];
                     $data = [
                         'name' => $nome,
-                        'email' => fake()->unique()->safeEmail,
-                        'phone' => preg_replace('/\D/', '', fake()->phoneNumber),
-                        'zip_code' => preg_replace('/\D/', '', fake()->postcode),
+                        'email' => $faker->unique()->safeEmail,
+                        'phone' => preg_replace('/\D/', '', $faker->phoneNumber),
+                        'zip_code' => preg_replace('/\D/', '', $faker->postcode),
                         'state' => 'RS',
                         'city' => 'Pelotas',
-                        'neighborhood' => fake()->randomElement(['Centro', 'Três Vendas', 'Areal', 'Fragata', 'Laranjal']),
-                        'street' => fake()->streetName,
-                        'number' => fake()->buildingNumber,
-                        'complement' => fake()->optional()->secondaryAddress,
+                        'neighborhood' => $faker->randomElement(['Centro', 'Três Vendas', 'Areal', 'Fragata', 'Laranjal']),
+                        'street' => $faker->streetName,
+                        'number' => $faker->buildingNumber,
+                        'complement' => $faker->optional()->secondaryAddress,
                         'date_of_birth' => $dob->format('Y-m-d'),
                         'age' => Carbon::instance($dob)->age,
                         'telegram_chat_id' => $chatId,
                     ];
                     if ($diseases) {
                         $data['diseases'] = json_encode(
-                            fake()->randomElements(
+                            $faker->randomElements(
                                 ['Diabetes', 'Hipertensão', 'Asma', 'Alergia', 'Depressão', 'Artrite'],
                                 rand(1, 3)
                             )
