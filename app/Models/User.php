@@ -55,6 +55,6 @@ class User extends Authenticatable
 
     public function specializations(): HasMany
     {
-        return $this->hasMany(Specialization::class, 'user_specialization');
+        return $this->hasMany(Specialization::class, 'user_specializations');
     }
 }
