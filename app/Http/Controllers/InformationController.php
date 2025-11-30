@@ -91,10 +91,10 @@ class InformationController extends Controller
             if (isset($data['message'])) {
                 $chatId = $data['message']['chat']['id'];
                 $nome   = $data['message']['from']['first_name'];
-                Patient::where('telegram_chat_id', $chatId);
+                $patient = Patient::where('telegram_chat_id', $chatId)->first();
                 $dob = fake()->dateTimeBetween('-90 years', '-18 years');
                 $diseases = rand(0, 1);
-                if (!Patient::where('telegram_chat_id', $chatId)->exists()) {
+                if (!$patient) {
                     $data = [];
                     $data = [
                         'name' => $nome,
