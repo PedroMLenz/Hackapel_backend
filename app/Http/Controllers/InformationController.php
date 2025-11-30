@@ -249,12 +249,13 @@ class InformationController extends Controller
             $chat_id = $data['message']['chat']['id'];
             $mensagem_usuario = $data['message']['text'];
             // Chama a função que se comunica com a OpenAI
-            $resposta_ia = $this->chamar_openai($mensagem_usuario, $system_prompt);
+            // $resposta_ia = $this->chamar_openai($mensagem_usuario, $system_prompt);
             Http::post(
                     "https://api.telegram.org/bot".env('TELEGRAM_TOKEN')."/sendMessage",
                     [
                         'chat_id' => $chat_id,
-                        'text' => $resposta_ia
+                        // 'text' => $resposta_ia
+                        'text' => $dados_do_sistema
                     ]
                 );
             // Resposta final ao Telegram (indica que a mensagem foi processada)
