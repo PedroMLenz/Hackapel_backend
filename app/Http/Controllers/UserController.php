@@ -13,7 +13,8 @@ class UserController extends Controller
 {
     public function index($id)
     {
-        $user = User::with('specializations')->find($id);
+        try {
+            $user = User::find($id)->with('specializations')->get();
         if (!$user) {
             return response()->json(['message' => 'User not found'], 404);
         }
@@ -23,6 +24,9 @@ class UserController extends Controller
             'user' => $user,
             'schedules' => $schedules,
         ], 200);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'An error occurred', 'error' => $e->getMessage()], 500);
+        }
     }
 
     public function store(StoreUserRequest $request)

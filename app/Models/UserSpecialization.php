@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class UserSpecialization extends Model
 {
+    protected $table = 'user_specializations';
     protected $fillable = [
         'user_id',
         'specialization_id',
