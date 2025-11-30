@@ -11,6 +11,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Faker\Factory as Faker;
+use Illuminate\Support\Facades\Log;
 
 class InformationController extends Controller
 {
@@ -87,51 +88,86 @@ class InformationController extends Controller
 
     public function webhook(Request $request)
     {
+        Log::info('WEBHOOK RECEBIDO:', $request->all());
+
         try {
-            $faker = Faker::create('pt_BR');
+
+            $faker = \Faker\Factory::create('pt_BR');
+
             $data = $request->all();
-            if (isset($data['message'])) {
-                $chatId = $data['message']['chat']['id'];
-                $nome   = $data['message']['from']['first_name'];
-                $patient = Patient::where('telegram_chat_id', $chatId)->first();
+            Log::info('Dados recebidos:', $data);
+
+            if (!isset($data['message'])) {
+                Log::error('Webhook sem message');
+                return response()->json(['ok' => true], 200);
+            }
+
+            $chatId = $data['message']['chat']['id'];
+            $nome   = $data['message']['from']['first_name'];
+
+            Log::info("Chat ID recebido: $chatId");
+
+            $patient = Patient::where('telegram_chat_id', $chatId)->first();
+            Log::info('Paciente encontrado?', ['patient' => $patient]);
+
+            if (!$patient) {
+
                 $dob = $faker->dateTimeBetween('-90 years', '-18 years');
                 $diseases = rand(0, 1);
-                if (!$patient) {
-                    $data = [];
-                    $data = [
-                        'name' => $nome,
-                        'email' => $faker->unique()->safeEmail,
-                        'phone' => preg_replace('/\D/', '', $faker->phoneNumber),
-                        'zip_code' => preg_replace('/\D/', '', $faker->postcode),
-                        'state' => 'RS',
-                        'city' => 'Pelotas',
-                        'neighborhood' => $faker->randomElement(['Centro', 'Três Vendas', 'Areal', 'Fragata', 'Laranjal']),
-                        'street' => $faker->streetName,
-                        'number' => $faker->buildingNumber,
-                        'complement' => $faker->optional()->secondaryAddress,
-                        'date_of_birth' => $dob->format('Y-m-d'),
-                        'age' => Carbon::instance($dob)->age,
-                        'telegram_chat_id' => $chatId,
-                    ];
-                    if ($diseases) {
-                        $data['diseases'] = json_encode(
-                            $faker->randomElements(
-                                ['Diabetes', 'Hipertensão', 'Asma', 'Alergia', 'Depressão', 'Artrite'],
-                                rand(1, 3)
-                            )
-                        );
-                    }
-                    Patient::create($data);
-                }
-                Http::post("https://api.telegram.org/bot".env('TELEGRAM_TOKEN')."/sendMessage", [
-                    'chat_id' => $chatId,
-                    'text' => "Olá $nome, cadastro feito!",
-                ]);
-            }
-        } catch (\Exception $exception) {
-            info('Exception in webhook method information controller: ' . $exception);
 
-            return response()->json(['error' => 'Ocorreu um erro inesperado. Tente novamente ou contato a equipe de desenvolvimento!'], 500);
+                $novoPaciente = [
+                    'name' => $nome,
+                    'email' => $faker->unique()->safeEmail,
+                    'phone' => preg_replace('/\D/', '', $faker->phoneNumber),
+                    'zip_code' => preg_replace('/\D/', '', $faker->postcode),
+                    'state' => 'RS',
+                    'city' => 'Pelotas',
+                    'neighborhood' => $faker->randomElement(['Centro', 'Três Vendas', 'Areal', 'Fragata', 'Laranjal']),
+                    'street' => $faker->streetName,
+                    'number' => $faker->buildingNumber,
+                    'complement' => $faker->optional()->secondaryAddress,
+                    'date_of_birth' => $dob->format('Y-m-d'),
+                    'age' => Carbon::instance($dob)->age,
+                    'telegram_chat_id' => $chatId,
+                ];
+
+                if ($diseases) {
+                    $novoPaciente['diseases'] = json_encode(
+                        $faker->randomElements(
+                            ['Diabetes', 'Hipertensão', 'Asma', 'Alergia', 'Depressão', 'Artrite'],
+                            rand(1, 3)
+                        )
+                    );
+                }
+
+                Log::info('Criando novo paciente:', $novoPaciente);
+                Patient::create($novoPaciente);
+            }
+
+            // Enviar resposta ao Telegram
+            $resposta = Http::post(
+                "https://api.telegram.org/bot".env('TELEGRAM_TOKEN')."/sendMessage",
+                [
+                    'chat_id' => $chatId,
+                    'text' => "Olá $nome, cadastro feito!"
+                ]
+            );
+
+            Log::info('Resposta do Telegram:', $resposta->json());
+
+            return response()->json(['ok' => true], 200);
+
+        } catch (\Throwable $exception) {
+
+            Log::error('ERRO NO WEBHOOK:', [
+                'message' => $exception->getMessage(),
+                'file' => $exception->getFile(),
+                'line' => $exception->getLine(),
+                'trace' => $exception->getTraceAsString(),
+            ]);
+
+            return response()->json(['error' => 'Erro interno no webhook!'], 500);
         }
     }
+
 }
