@@ -86,7 +86,7 @@ class InformationController extends Controller
         }
     }
 
-    public function webhook(Request $request)
+    public function handleTelegramWebhook(Request $request)
     {
         Log::info('WEBHOOK RAW:', ['body' => $request->getContent()]);
 
