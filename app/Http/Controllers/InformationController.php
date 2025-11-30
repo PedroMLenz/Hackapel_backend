@@ -6,6 +6,8 @@ use App\Http\Requests\Information\StoreInformationRequest;
 use App\Jobs\SendTelegramMessageJob;
 use App\Models\Information;
 use App\Models\Patient;
+use App\Models\Schedule;
+use App\Models\Specialization;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -164,14 +166,99 @@ class InformationController extends Controller
                 Patient::create($novoPaciente);
             }
 
-            Http::post(
-                "https://api.telegram.org/bot".env('TELEGRAM_TOKEN')."/sendMessage",
-                [
-                    'chat_id' => $chatId,
-                    'text' => "Olá $nome, cadastro feito!"
-                ]
-            );
+            if ($data['message']['text'] === '/start') {
+                Http::post(
+                    "https://api.telegram.org/bot".env('TELEGRAM_TOKEN')."/sendMessage",
+                    [
+                        'chat_id' => $chatId,
+                        'text' => "Olá $nome! Bem-vindo ao nosso serviço de informações de saúde. Você receberá atualizações importantes aqui."
+                    ]
+                );
 
+                return response()->json(['ok' => true], 200);
+            }
+            $user = User::where('neighborhood', $data['message']['text'])->exists();
+            if($user) {
+                $schedules = Schedule::where('user_id', $user->id)->get();
+                $horarios = "Aqui estão os horários disponíveis na sua região:\n";
+                foreach($schedules as $schedule) {
+                    $horarios .= "- Dia da semana: " . $schedule->day_of_week . ", das " . $schedule->open_time . " às " . $schedule->close_time . "\n";
+                }
+                $specializations = Specialization::whereHas('users', function ($query) use ($user) {
+                    $query->where('user_id', $user->id);
+                })->get();
+                $addresses = $user->neighborhood . ": " . $user->street . ", " . $user->number . "\n";
+                $dados_do_sistema = "Especializações disponíveis: " . $specializations->pluck('name')->join(', ') . ".\n" .
+                    "Locais de atendimento: " . $addresses .
+                    "Horários de atendimento: " . $horarios;
+            }
+            else {
+
+            }
+
+            $system_prompt = <<<PROMPT
+            # IDENTIDADE
+            Você é o *Assistente Virtual de Saúde* oficial do sistema "Notificai".
+            Sua função é auxiliar cidadãos a encontrar informações sobre unidades de saúde, especialidades médicas e agendamentos.
+
+            # TOM DE VOZ
+            - *Empático e Respeitoso:* Lembre-se que o usuário pode estar doente ou preocupado.
+            - *Direto e Claro:* Evite termos técnicos médicos complexos. Use linguagem acessível.
+            - *Idioma:* Português do Brasil (pt-BR).
+
+            # REGRAS (MUITO IMPORTANTE)
+            1. *Veracidade:* Você SÓ pode responder com base nos dados fornecidos na seção "CONTEXTO DE DADOS" abaixo.
+            2. *Anti-Alucinação:* Se a informação não estiver nos dados abaixo, responda: "Desculpe, não tenho essa informação no momento. Por favor, entre em contato com a secretaria de saúde."
+            3. *Escopo:* Se o usuário perguntar sobre política, futebol, código ou qualquer coisa fora de saúde/agendamento, diga educadamente que só pode ajudar com questões de saúde.
+            4. *Não Invente:* NUNCA invente horários, nomes de médicos ou endereços que não estejam listados.
+            5. "Se o usuário disser termos populares, associe à especialidade correta. Ex: 'Médico de coração' = Cardiologia; 'Médico de pele' = Dermatologia; 'Médico de criança' = Pediatria."
+            6.  Se o usuário perguntar horário, verifique a lista de 'Schedules'.
+            Se procurar médico, verifique 'Specializations' e o endereço em 'Locais'.
+            3. Se não tiver a informação, diga que não encontrou.
+
+            # FORMATO DE RESPOSTA
+            - Se for listar horários ou locais, use tópicos (bullet points) para facilitar a leitura.
+            - Não envie textos muito longos (máximo de 3 parágrafos).
+
+            ---
+            # CONTEXTO DE DADOS (BASE DE CONHECIMENTO)
+            As informações oficiais atualizadas são as seguintes:
+
+            {{DADOS_DO_SISTEMA}}
+
+            ---
+
+            # EXEMPLOS DE INTERAÇÃO
+
+            *Usuário:* "Quero marcar um cardiologista."
+            *Você:* "Para cardiologia, você pode procurar a *UBS Centro* (Rua das Flores, 123) ou o *Hospital Geral*. O atendimento é das 08:00 às 17:00."
+
+            *Usuário:* "Quem ganhou o jogo ontem?"
+            *Você:* "Sou um assistente focado apenas em saúde e agendamentos. Posso ajudar com algo relacionado a isso?"
+                    PROMPT;
+
+            // Recebe os dados brutos do Telegram
+            $update = file_get_contents('php://input');
+            $data = json_decode($update, true);
+            // Verifica se a requisição contém uma mensagem válida
+            if (!isset($data['message']['text']) || !isset($data['message']['chat']['id'])) {
+                // Retorna OK para o Telegram, mas não faz nada
+                http_response_code(200);
+                exit;
+            }
+            $chat_id = $data['message']['chat']['id'];
+            $mensagem_usuario = $data['message']['text'];
+            // Chama a função que se comunica com a OpenAI
+            $resposta_ia = $this->chamar_openai($mensagem_usuario, $system_prompt);
+            Http::post(
+                    "https://api.telegram.org/bot".env('TELEGRAM_TOKEN')."/sendMessage",
+                    [
+                        'chat_id' => $chat_id,
+                        'text' => $resposta_ia
+                    ]
+                );
+            // Resposta final ao Telegram (indica que a mensagem foi processada)
+            http_response_code(200);
             return response()->json(['ok' => true], 200);
 
         } catch (\Throwable $e) {
@@ -184,5 +271,45 @@ class InformationController extends Controller
 
             return response()->json(['error' => 'erro interno'], 500);
         }
+    }
+
+    /**
+     * Faz a requisição POST para a API de Chat Completion da OpenAI.
+     */
+    private function chamar_openai($prompt_usuario, $system_prompt) {
+        $messages = [
+            ['role' => 'system', 'content' => $system_prompt],
+            ['role' => 'user', 'content' => $prompt_usuario]
+        ];
+        $data = [
+            'model' => env('OPENAI_MODEL'),
+            'messages' => $messages,
+            'temperature' => 0.7,
+        ];
+        $ch = curl_init('https://api.openai.com/v1/chat/completions');
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . env('OPENAI_API_KEY')
+        ]);
+
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        $response_data = json_decode($response, true);
+
+        if ($http_code !== 200) {
+            $error_message = $response_data['error']['message'] ?? "Erro HTTP $http_code. Verifique a chave da OpenAI e os créditos.";
+            return "Desculpe, o sistema de Inteligência Artificial está com problemas: $error_message";
+        }
+
+        if (isset($response_data['choices'][0]['message']['content'])) {
+            return $response_data['choices'][0]['message']['content'];
+        }
+
+        return null;
     }
 }
