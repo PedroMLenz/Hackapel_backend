@@ -35,66 +35,68 @@ class InformationController extends Controller
     {
         try {
             $user = User::findOrFail($id);
-        $filters = [];
-        if ($request->has('neighborhood')) {
-            $filters['neighborhood'] = $request->input('neighborhood');
-        }
-        if ($request->has('disease')) {
-            $filters['disease'] = $request->input('disease');
-        }
-        if ($request->has('age_group')) {
-            $filters['age_group'] = $request->input('age_group');
-        }
-        if (empty($filters)) {
-            $filters = 'all';
-        }
-        $information = Information::create([
-            'title' => $request->input('title'),
-            'content' => $request->input('content'),
-            'user_id' => $user->id,
-            'filters' => is_array($filters) ? implode(',', $filters) : $filters,
-        ]);
-
-        if($filters == 'all') {
-            $patients = Patient::all();
-        } else {
-            $patients = Patient::query();
-
-            if (isset($filters['neighborhood'])) {
-                $patients->where('neighborhood', $filters['neighborhood']);
+            $filters = [];
+            if ($request->has('neighborhood')) {
+                $filters['neighborhood'] = $request->input('neighborhood');
             }
-            if (isset($filters['disease'])) {
-                $patients->whereJsonContains('diseases', $filters['disease']);
+            if ($request->has('disease')) {
+                $filters['disease'] = $request->input('disease');
             }
-            if (isset($filters['age_group'])) {
-                $ageGroup = $filters['age_group'];
-                switch ($ageGroup) {
-                    case 'child':
-                        $patients->where('age', '<=', 12);
-                        break;
-                    case 'teen':
-                        $patients->whereBetween('age', [13, 19]);
-                        break;
-                    case 'adult':
-                        $patients->whereBetween('age', [20, 59]);
-                        break;
-                    case 'senior':
-                        $patients->where('age', '>=', 60);
-                        break;
+            if ($request->has('age_group')) {
+                $filters['age_group'] = $request->input('age_group');
+            }
+            if (empty($filters)) {
+                $filters = 'all';
+            }
+
+            if($filters == 'all') {
+                $patients = Patient::all();
+            } else {
+                $patients = Patient::query();
+
+                if (isset($filters['neighborhood'])) {
+                    $patients->where('neighborhood', $filters['neighborhood']);
                 }
+                if (isset($filters['disease'])) {
+                    $patients->whereJsonContains('diseases', $filters['disease']);
+                }
+                if (isset($filters['age_group'])) {
+                    $ageGroup = $filters['age_group'];
+                    switch ($ageGroup) {
+                        case 'child':
+                            $patients->where('age', '<=', 12);
+                            break;
+                        case 'teen':
+                            $patients->whereBetween('age', [13, 19]);
+                            break;
+                        case 'adult':
+                            $patients->whereBetween('age', [20, 59]);
+                            break;
+                        case 'senior':
+                            $patients->where('age', '>=', 60);
+                            break;
+                    }
+                }
+
+                $patients = $patients->get();
             }
 
-            $patients = $patients->get();
-        }
+            $information = Information::create([
+                'title' => $request->input('title'),
+                'content' => $request->input('content'),
+                'user_id' => $user->id,
+                'filters' => is_array($filters) ? implode(',', $filters) : $filters,
+                'patients_sended_count' => $patients->count(),
+            ]);
 
-        foreach ($patients as $patient) {
-            dispatch(new SendTelegramMessageJob(
-                $patient->telegram_chat_id,
-                $information->content
-            ));
-        }
+            foreach ($patients as $patient) {
+                dispatch(new SendTelegramMessageJob(
+                    $patient->telegram_chat_id,
+                    $information->content
+                ));
+            }
 
-        return response()->json($information, 201);
+            return response()->json($information, 201);
         } catch (\Exception $exception) {
             info('Exception in store method information controller: ' . $exception);
 

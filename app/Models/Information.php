@@ -10,6 +10,7 @@ class Information extends Model
         'title',
         'content',
         'user_id',
-        'filters'
+        'filters',
+        'patients_sended_count',
     ];
 }

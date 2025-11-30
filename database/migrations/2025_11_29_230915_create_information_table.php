@@ -18,6 +18,7 @@ return new class extends Migration
             $table->unsignedBigInteger('user_id');
             $table->foreign('user_id')->references('id')->on('users');
             $table->string('filters');
+            $table->integer('patients_sended_count')->default(0);
             $table->timestamps();
         });
     }
