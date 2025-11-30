@@ -316,7 +316,7 @@ class InformationController extends Controller
         try {
             $response = Http::withToken(env('OPENAI_API_KEY'))
                 ->post('https://api.openai.com/v1/chat/completions', [
-                    'model' => env('OPENAI_MODEL', 'gpt-4o'),
+                    'model' => env('OPENAI_MODEL', 'gpt-4.1'),
                     'messages' => [
                         ['role' => 'system', 'content' => $systemPrompt],
                         ['role' => 'user', 'content' => $userMessage]
