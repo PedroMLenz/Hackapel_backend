@@ -19,6 +19,10 @@ class DatabaseSeeder extends Seeder
             'name' => 'UBS Teste',
             'email' => 'ubs@example.com',
             'password' => bcrypt('password'),
+            'zipcode' => '96081700',
+            'neighborhood' => 'Areal',
+            'street' => 'Rua Dr. Barcelos',
+            'number' => 600,
         ]);
 
         $this->call(PatientSeeder::class);
