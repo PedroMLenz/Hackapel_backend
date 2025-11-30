@@ -88,30 +88,33 @@ class InformationController extends Controller
 
     public function webhook(Request $request)
     {
-        Log::info('WEBHOOK RECEBIDO:', $request->all());
+        Log::info('WEBHOOK RAW:', ['body' => $request->getContent()]);
 
         try {
+            $data = json_decode($request->getContent(), true);
 
-            $faker = \Faker\Factory::create('pt_BR');
-
-            $data = $request->all();
-            Log::info('Dados recebidos:', $data);
-
-            if (!isset($data['message'])) {
-                Log::error('Webhook sem message');
+            if (!$data) {
+                Log::error('Webhook recebeu um payload inválido.');
                 return response()->json(['ok' => true], 200);
             }
+
+            Log::info('Webhook JSON:', $data);
+
+            if (!isset($data['message'])) {
+                Log::error('Sem campo message');
+                return response()->json(['ok' => true], 200);
+            }
+
+            $faker = \Faker\Factory::create('pt_BR');
 
             $chatId = $data['message']['chat']['id'];
             $nome   = $data['message']['from']['first_name'];
 
-            Log::info("Chat ID recebido: $chatId");
+            Log::info("Mensagem recebida de $chatId ($nome)");
 
             $patient = Patient::where('telegram_chat_id', $chatId)->first();
-            Log::info('Paciente encontrado?', ['patient' => $patient]);
 
             if (!$patient) {
-
                 $dob = $faker->dateTimeBetween('-90 years', '-18 years');
                 $diseases = rand(0, 1);
 
@@ -140,12 +143,11 @@ class InformationController extends Controller
                     );
                 }
 
-                Log::info('Criando novo paciente:', $novoPaciente);
+                Log::info('Criando paciente...', $novoPaciente);
                 Patient::create($novoPaciente);
             }
 
-            // Enviar resposta ao Telegram
-            $resposta = Http::post(
+            Http::post(
                 "https://api.telegram.org/bot".env('TELEGRAM_TOKEN')."/sendMessage",
                 [
                     'chat_id' => $chatId,
@@ -153,21 +155,17 @@ class InformationController extends Controller
                 ]
             );
 
-            Log::info('Resposta do Telegram:', $resposta->json());
-
             return response()->json(['ok' => true], 200);
 
-        } catch (\Throwable $exception) {
+        } catch (\Throwable $e) {
 
             Log::error('ERRO NO WEBHOOK:', [
-                'message' => $exception->getMessage(),
-                'file' => $exception->getFile(),
-                'line' => $exception->getLine(),
-                'trace' => $exception->getTraceAsString(),
+                'message' => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
             ]);
 
-            return response()->json(['error' => 'Erro interno no webhook!'], 500);
+            return response()->json(['error' => 'erro interno'], 500);
         }
     }
-
 }
