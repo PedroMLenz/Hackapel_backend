@@ -195,6 +195,8 @@ class InformationController extends Controller
                 return response()->json(['ok' => true]);
             }
 
+            Log::info("Mensagem recebida de $chatId ($firstName): $userMessage");
+
 
             // 3. IDENTIFICAR O PACIENTE E O BAIRRO
             // Tenta achar o paciente. Se não achar, cria (mantendo sua lógica de Faker para teste)
