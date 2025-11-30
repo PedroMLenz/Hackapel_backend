@@ -106,36 +106,25 @@ class InformationController extends Controller
 
     public function handleTelegramWebhook(Request $request)
     {
-        Log::info('WEBHOOK RAW:', ['body' => $request->getContent()]);
-
         try {
             $data = json_decode($request->getContent(), true);
-
             if (!$data) {
                 Log::error('Webhook recebeu um payload inválido.');
                 return response()->json(['ok' => true], 200);
             }
-
             Log::info('Webhook JSON:', $data);
-
             if (!isset($data['message'])) {
                 Log::error('Sem campo message');
                 return response()->json(['ok' => true], 200);
             }
-
             $faker = \Faker\Factory::create('pt_BR');
-
             $chatId = $data['message']['chat']['id'];
             $nome   = $data['message']['from']['first_name'];
-
-            Log::info("Mensagem recebida de $chatId ($nome)");
-
+            Log::info("Mensagem recebida de $chatId ($nome)", $data['message']);
             $patient = Patient::where('telegram_chat_id', $chatId)->first();
-
             if (!$patient) {
                 $dob = $faker->dateTimeBetween('-90 years', '-18 years');
                 $diseases = rand(0, 1);
-
                 $novoPaciente = [
                     'name' => $nome,
                     'email' => $faker->unique()->safeEmail,
@@ -151,7 +140,6 @@ class InformationController extends Controller
                     'age' => Carbon::instance($dob)->age,
                     'telegram_chat_id' => $chatId,
                 ];
-
                 if ($diseases) {
                     $novoPaciente['diseases'] = json_encode(
                         $faker->randomElements(
@@ -160,7 +148,6 @@ class InformationController extends Controller
                         )
                     );
                 }
-
                 Log::info('Criando paciente...', $novoPaciente);
                 Patient::create($novoPaciente);
             }
