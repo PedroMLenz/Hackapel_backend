@@ -121,26 +121,92 @@ class InformationController extends Controller
     public function handleTelegramWebhook(Request $request)
     {
         try {
-            $data = json_decode($request->getContent(), true);
-            if (!$data) {
-                Log::error('Webhook recebeu um payload inválido.');
-                return response()->json(['ok' => true], 200);
+            // $data = json_decode($request->getContent(), true);
+            // if (!$data) {
+            //     Log::error('Webhook recebeu um payload inválido.');
+            //     return response()->json(['ok' => true], 200);
+            // }
+            // Log::info('Webhook JSON:', $data);
+            // if (!isset($data['message'])) {
+            //     Log::error('Sem campo message');
+            //     return response()->json(['ok' => true], 200);
+            // }
+            // $faker = \Faker\Factory::create('pt_BR');
+            // $chatId = $data['message']['chat']['id'];
+            // $nome   = $data['message']['from']['first_name'];
+            // Log::info("Mensagem recebida de $chatId ($nome)", $data['message']);
+            // $patient = Patient::where('telegram_chat_id', $chatId)->first();
+            // if (!$patient) {
+            //     $dob = $faker->dateTimeBetween('-90 years', '-18 years');
+            //     $diseases = rand(0, 1);
+            //     $novoPaciente = [
+            //         'name' => $nome,
+            //         'email' => $faker->unique()->safeEmail,
+            //         'phone' => preg_replace('/\D/', '', $faker->phoneNumber),
+            //         'zip_code' => preg_replace('/\D/', '', $faker->postcode),
+            //         'state' => 'RS',
+            //         'city' => 'Pelotas',
+            //         'neighborhood' => $faker->randomElement(['Centro', 'Três Vendas', 'Areal', 'Fragata', 'Laranjal']),
+            //         'street' => $faker->streetName,
+            //         'number' => $faker->buildingNumber,
+            //         'complement' => $faker->optional()->secondaryAddress,
+            //         'date_of_birth' => $dob->format('Y-m-d'),
+            //         'age' => Carbon::instance($dob)->age,
+            //         'telegram_chat_id' => $chatId,
+            //     ];
+            //     if ($diseases) {
+            //         $novoPaciente['diseases'] = json_encode(
+            //             $faker->randomElements(
+            //                 ['Diabetes', 'Hipertensão', 'Asma', 'Alergia', 'Depressão', 'Artrite'],
+            //                 rand(1, 3)
+            //             )
+            //         );
+            //     }
+            //     Log::info('Criando paciente...', $novoPaciente);
+            //     Patient::create($novoPaciente);
+            // }
+
+            // if ($data['message']['text'] === '/start') {
+            //     Http::post(
+            //         "https://api.telegram.org/bot".env('TELEGRAM_TOKEN')."/sendMessage",
+            //         [
+            //             'chat_id' => $chatId,
+            //             'text' => "Olá $nome! Bem-vindo ao nosso serviço de informações de saúde. Você receberá atualizações importantes aqui."
+            //         ]
+            //     );
+
+            //     return response()->json(['ok' => true], 200);
+            // }
+
+             // 1. CAPTURA E VALIDAÇÃO DOS DADOS
+            $data = $request->all(); // O Laravel já faz o json_decode automaticamente
+
+            if (!isset($data['message']['text']) || !isset($data['message']['chat']['id'])) {
+                return response()->json(['ok' => true]);
             }
-            Log::info('Webhook JSON:', $data);
-            if (!isset($data['message'])) {
-                Log::error('Sem campo message');
-                return response()->json(['ok' => true], 200);
-            }
-            $faker = \Faker\Factory::create('pt_BR');
+
             $chatId = $data['message']['chat']['id'];
-            $nome   = $data['message']['from']['first_name'];
-            Log::info("Mensagem recebida de $chatId ($nome)", $data['message']);
+            $userMessage = $data['message']['text'];
+            $firstName = $data['message']['from']['first_name'] ?? 'Cidadão';
+
+            // 2. COMANDOS BÁSICOS (/start)
+            if ($userMessage === '/start') {
+                $this->sendMessage($chatId, "Olá $firstName! Bem-vindo ao Notificai. Qual é o seu Bairro ou Cidade para eu localizar a unidade mais próxima?");
+                return response()->json(['ok' => true]);
+            }
+
+
+            // 3. IDENTIFICAR O PACIENTE E O BAIRRO
+            // Tenta achar o paciente. Se não achar, cria (mantendo sua lógica de Faker para teste)
             $patient = Patient::where('telegram_chat_id', $chatId)->first();
+
+            $faker = \Faker\Factory::create('pt_BR');
+
             if (!$patient) {
                 $dob = $faker->dateTimeBetween('-90 years', '-18 years');
                 $diseases = rand(0, 1);
                 $novoPaciente = [
-                    'name' => $nome,
+                    'name' => $userMessage,
                     'email' => $faker->unique()->safeEmail,
                     'phone' => preg_replace('/\D/', '', $faker->phoneNumber),
                     'zip_code' => preg_replace('/\D/', '', $faker->postcode),
@@ -162,155 +228,110 @@ class InformationController extends Controller
                         )
                     );
                 }
-                Log::info('Criando paciente...', $novoPaciente);
-                Patient::create($novoPaciente);
             }
 
-            if ($data['message']['text'] === '/start') {
-                Http::post(
-                    "https://api.telegram.org/bot".env('TELEGRAM_TOKEN')."/sendMessage",
-                    [
-                        'chat_id' => $chatId,
-                        'text' => "Olá $nome! Bem-vindo ao nosso serviço de informações de saúde. Você receberá atualizações importantes aqui."
-                    ]
-                );
+            // 4. LÓGICA INTELIGENTE: BUSCAR DADOS DA REGIÃO
+            // A IA precisa saber o contexto da região do usuário
 
-                return response()->json(['ok' => true], 200);
+            // Tenta achar uma UBS no mesmo bairro do paciente
+            $ubsProxima = User::where('neighborhood', $patient->neighborhood)->first();
+
+            // Se não achar no bairro, pega qualquer uma da cidade ou a primeira do banco
+            if (!$ubsProxima) {
+                $ubsProxima = User::first();
             }
-            $user = User::where('neighborhood', $data['message']['text'])->exists();
-            if($user) {
-                $schedules = Schedule::where('user_id', $user->id)->get();
-                $horarios = "Aqui estão os horários disponíveis na sua região:\n";
-                foreach($schedules as $schedule) {
-                    $horarios .= "- Dia da semana: " . $schedule->day_of_week . ", das " . $schedule->open_time . " às " . $schedule->close_time . "\n";
+
+            // Busca especialidades e horários dessa UBS específica
+            $specialties = Specialization::all()->pluck('name')->join(', ');
+
+            $schedulesInfo = "Horários padrão: 08:00 às 17:00";
+            if ($ubsProxima) {
+                $schedules = Schedule::where('user_id', $ubsProxima->id)->take(5)->get();
+                if ($schedules->isNotEmpty()) {
+                    $schedulesInfo = $schedules->map(fn($s) => "{$s->day_of_week}: {$s->open_time} às {$s->close_time}")->join("\n");
                 }
-                $specializations = Specialization::whereHas('users', function ($query) use ($user) {
-                    $query->where('user_id', $user->id);
-                })->get();
-                $addresses = $user->neighborhood . ": " . $user->street . ", " . $user->number . "\n";
-                $dados_do_sistema = "Especializações disponíveis: " . $specializations->pluck('name')->join(', ') . ".\n" .
-                    "Locais de atendimento: " . $addresses .
-                    "Horários de atendimento: " . $horarios;
-            }
-            else {
-
             }
 
-            $system_prompt = <<<PROMPT
+            // 5. MONTAR O CONTEXTO PARA A IA
+            $dadosDoSistema = <<<DATA
+            [DADOS DO PACIENTE]
+            Nome: {$patient->name}
+            Bairro de Residência: {$patient->neighborhood}
+
+            [UNIDADE DE SAÚDE DE REFERÊNCIA]
+            Nome: {$ubsProxima->name}
+            Endereço: {$ubsProxima->street}, {$ubsProxima->number} - {$ubsProxima->neighborhood}
+
+            [ESPECIALIDADES GERAIS DA REDE]
+            {$specialties}
+
+            [HORÁRIOS DA UNIDADE]
+            {$schedulesInfo}
+            DATA;
+
+            // 6. MONTAR O PROMPT DO SISTEMA
+            $systemPrompt = <<<PROMPT
             # IDENTIDADE
-            Você é o *Assistente Virtual de Saúde* oficial do sistema "Notificai".
-            Sua função é auxiliar cidadãos a encontrar informações sobre unidades de saúde, especialidades médicas e agendamentos.
+            Você é o Assistente Virtual do sistema "Notificai".
 
-            # TOM DE VOZ
-            - *Empático e Respeitoso:* Lembre-se que o usuário pode estar doente ou preocupado.
-            - *Direto e Claro:* Evite termos técnicos médicos complexos. Use linguagem acessível.
-            - *Idioma:* Português do Brasil (pt-BR).
+            # CONTEXTO
+            {$dadosDoSistema}
 
-            # REGRAS (MUITO IMPORTANTE)
-            1. *Veracidade:* Você SÓ pode responder com base nos dados fornecidos na seção "CONTEXTO DE DADOS" abaixo.
-            2. *Anti-Alucinação:* Se a informação não estiver nos dados abaixo, responda: "Desculpe, não tenho essa informação no momento. Por favor, entre em contato com a secretaria de saúde."
-            3. *Escopo:* Se o usuário perguntar sobre política, futebol, código ou qualquer coisa fora de saúde/agendamento, diga educadamente que só pode ajudar com questões de saúde.
-            4. *Não Invente:* NUNCA invente horários, nomes de médicos ou endereços que não estejam listados.
-            5. "Se o usuário disser termos populares, associe à especialidade correta. Ex: 'Médico de coração' = Cardiologia; 'Médico de pele' = Dermatologia; 'Médico de criança' = Pediatria."
-            6.  Se o usuário perguntar horário, verifique a lista de 'Schedules'.
-            Se procurar médico, verifique 'Specializations' e o endereço em 'Locais'.
-            3. Se não tiver a informação, diga que não encontrou.
+            # REGRAS
+            1. O usuário mora no bairro {$patient->neighborhood}. Indique a unidade "{$ubsProxima->name}" como a mais próxima.
+            2. Se o usuário perguntar o endereço, forneça o endereço da unidade listada acima.
+            3. Responda de forma curta e acolhedora.
+            PROMPT;
 
-            # FORMATO DE RESPOSTA
-            - Se for listar horários ou locais, use tópicos (bullet points) para facilitar a leitura.
-            - Não envie textos muito longos (máximo de 3 parágrafos).
+            // 7. CHAMAR A OPENAI (Usando Laravel Http, bem mais limpo)
+            $respostaIA = $this->callOpenAI($userMessage, $systemPrompt);
 
-            ---
-            # CONTEXTO DE DADOS (BASE DE CONHECIMENTO)
-            As informações oficiais atualizadas são as seguintes:
+            // 8. ENVIAR RESPOSTA
+            $this->sendMessage($chatId, $respostaIA);
 
-            {{DADOS_DO_SISTEMA}}
-
-            ---
-
-            # EXEMPLOS DE INTERAÇÃO
-
-            *Usuário:* "Quero marcar um cardiologista."
-            *Você:* "Para cardiologia, você pode procurar a *UBS Centro* (Rua das Flores, 123) ou o *Hospital Geral*. O atendimento é das 08:00 às 17:00."
-
-            *Usuário:* "Quem ganhou o jogo ontem?"
-            *Você:* "Sou um assistente focado apenas em saúde e agendamentos. Posso ajudar com algo relacionado a isso?"
-                    PROMPT;
-
-            // Recebe os dados brutos do Telegram
-            $update = file_get_contents('php://input');
-            $data = json_decode($update, true);
-            // Verifica se a requisição contém uma mensagem válida
-            if (!isset($data['message']['text']) || !isset($data['message']['chat']['id'])) {
-                // Retorna OK para o Telegram, mas não faz nada
-                http_response_code(200);
-                exit;
-            }
-            $chat_id = $data['message']['chat']['id'];
-            $mensagem_usuario = $data['message']['text'];
-            // Chama a função que se comunica com a OpenAI
-            // $resposta_ia = $this->chamar_openai($mensagem_usuario, $system_prompt);
-            Http::post(
-                    "https://api.telegram.org/bot".env('TELEGRAM_TOKEN')."/sendMessage",
-                    [
-                        'chat_id' => $chat_id,
-                        // 'text' => $resposta_ia
-                        'text' => $dados_do_sistema
-                    ]
-                );
-            // Resposta final ao Telegram (indica que a mensagem foi processada)
-            http_response_code(200);
-            return response()->json(['ok' => true], 200);
+            return response()->json(['ok' => true]);
 
         } catch (\Throwable $e) {
-
-            Log::error('ERRO NO WEBHOOK:', [
-                'message' => $e->getMessage(),
-                'file'    => $e->getFile(),
-                'line'    => $e->getLine(),
-            ]);
-
-            return response()->json(['error' => 'erro interno'], 500);
+            Log::error('ERRO WEBHOOK:', ['msg' => $e->getMessage(), 'line' => $e->getLine()]);
+            return response()->json(['error' => 'Internal Error'], 500);
         }
     }
 
     /**
-     * Faz a requisição POST para a API de Chat Completion da OpenAI.
+     * Envia mensagem para o Telegram
      */
-    private function chamar_openai($prompt_usuario, $system_prompt) {
-        $messages = [
-            ['role' => 'system', 'content' => $system_prompt],
-            ['role' => 'user', 'content' => $prompt_usuario]
-        ];
-        $data = [
-            'model' => env('OPENAI_MODEL'),
-            'messages' => $messages,
-            'temperature' => 0.7,
-        ];
-        $ch = curl_init('https://api.openai.com/v1/chat/completions');
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Content-Type: application/json',
-            'Authorization: Bearer ' . env('OPENAI_API_KEY')
+    private function sendMessage($chatId, $text)
+    {
+        Http::post("https://api.telegram.org/bot".env('TELEGRAM_TOKEN')."/sendMessage", [
+            'chat_id' => $chatId,
+            'text' => $text
         ]);
+    }
 
-        $response = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+    /**
+     * Chama a OpenAI
+     */
+    private function callOpenAI($userMessage, $systemPrompt)
+    {
+        try {
+            $response = Http::withToken(env('OPENAI_API_KEY'))
+                ->post('https://api.openai.com/v1/chat/completions', [
+                    'model' => env('OPENAI_MODEL', 'gpt-4o'),
+                    'messages' => [
+                        ['role' => 'system', 'content' => $systemPrompt],
+                        ['role' => 'user', 'content' => $userMessage]
+                    ],
+                    'temperature' => 0.5,
+                ]);
 
-        $response_data = json_decode($response, true);
+            if ($response->successful()) {
+                return $response->json()['choices'][0]['message']['content'];
+            }
 
-        if ($http_code !== 200) {
-            $error_message = $response_data['error']['message'] ?? "Erro HTTP $http_code. Verifique a chave da OpenAI e os créditos.";
-            return "Desculpe, o sistema de Inteligência Artificial está com problemas: $error_message";
+            Log::error('OpenAI Error', $response->json());
+            return "Desculpe, estou com dificuldade de acessar o sistema agora.";
+        } catch (\Exception $e) {
+            return "Erro de conexão com a inteligência.";
         }
-
-        if (isset($response_data['choices'][0]['message']['content'])) {
-            return $response_data['choices'][0]['message']['content'];
-        }
-
-        return null;
     }
 }
