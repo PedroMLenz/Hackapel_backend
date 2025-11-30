@@ -16,28 +16,27 @@ class PatientSeeder extends Seeder
     public function run(): void
     {
         for ($i = 1; $i <= 30; $i++) {
-            $faker = Factory::create('pt_BR');
-            $dob = $faker->dateTimeBetween('-90 years', '-18 years');
+            $dob = fake()->dateTimeBetween('-90 years', '-18 years');
             $diseases = rand(0, 1);
 
             $data = [
-                'name' => $faker->name,
-                'email' => $faker->unique()->safeEmail,
-                'phone' => preg_replace('/\D/', '', $faker->phoneNumber),
-                'zip_code' => preg_replace('/\D/', '', $faker->postcode),
+                'name' => fake()->name,
+                'email' => fake()->unique()->safeEmail,
+                'phone' => preg_replace('/\D/', '', fake()->phoneNumber),
+                'zip_code' => preg_replace('/\D/', '', fake()->postcode),
                 'state' => 'RS',
                 'city' => 'Pelotas',
-                'neighborhood' => $faker->randomElement(['Centro', 'Três Vendas', 'Areal', 'Fragata', 'Laranjal']),
-                'street' => $faker->streetName,
-                'number' => $faker->buildingNumber,
-                'complement' => $faker->optional()->secondaryAddress,
+                'neighborhood' => fake()->randomElement(['Centro', 'Três Vendas', 'Areal', 'Fragata', 'Laranjal']),
+                'street' => fake()->streetName,
+                'number' => fake()->buildingNumber,
+                'complement' => fake()->optional()->secondaryAddress,
                 'date_of_birth' => $dob->format('Y-m-d'),
                 'age' => Carbon::instance($dob)->age,
             ];
 
             if ($diseases) {
                 $data['diseases'] = json_encode(
-                    $faker->randomElements(
+                    fake()->randomElements(
                         ['Diabetes', 'Hipertensão', 'Asma', 'Alergia', 'Depressão', 'Artrite'],
                         rand(1, 3)
                     )
